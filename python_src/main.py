@@ -35,6 +35,7 @@ def main():
     
     # Main estimation loop
     for i in range(10):
+        print(f"i = {i}")
         estimate_instance = EstimateLaneParam()
         
         # Set parameters
@@ -53,9 +54,13 @@ def main():
         print(f"measurement matrix_Z = {matrix_Z}")
         
         # Set data and estimate
-        estimate_instance.set_data(matrix_X, speed, look_dis_time, w, matrix_Z)
-        estimate_instance.estimate_lane_line_param(matrix_P, matrix_X)
-        
+        estimate_instance.set_motion_data(speed, look_dis_time, w)
+        estimate_instance.predict(matrix_P, matrix_X)
+        #print(f"matrix_X_pred = {matrix_X}")
+        if i != 5:  # 第6次不更新
+            estimate_instance.update(matrix_P, matrix_X, matrix_Z)
+        else:
+            print("no update")
         print(f"matrix_X_res = {matrix_X}")
         print("-" * 50)
 

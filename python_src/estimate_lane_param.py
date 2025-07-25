@@ -40,34 +40,47 @@ class EstimateLaneParam:
         self.matrix_Z_ = None
         self.matrix_X_ = None  # state vector
         self.matrix_U_ = None  # control vector
+        
+        # Kalman Filter instance
+        self.kalman_ = None
     
-    def set_data(self, matrix_X, speed, look_forward_time, w, matrix_Z):
+    def set_motion_data(self, speed, look_forward_time, w):
         """
-        Set data for estimation
+        Set motion data for prediction
         
         Args:
-            matrix_X: state vector
             speed: vehicle speed
             look_forward_time: look forward time
             w: angular velocity
-            matrix_Z: measurement vector
         """
         self.speed_ = speed
         self.look_forward_time_ = look_forward_time
-        self.matrix_X_ = matrix_X.copy()
         self.w_ = w
-        self.matrix_Z_ = matrix_Z.copy()
     
-    def estimate_lane_line_param(self, matrix_P, matrix_X):
+    def set_state_data(self, matrix_X, matrix_P):
         """
-        Estimate lane line parameters using Kalman Filter
+        Set state data for estimation
         
         Args:
-            matrix_P: error covariance matrix (input/output)
-            matrix_X: state vector (input/output)
+            matrix_X: state vector
+            matrix_P: error covariance matrix
         """
+        self.matrix_X_ = matrix_X.copy()
         self.matrix_P_ = matrix_P.copy()
+    
+    def set_measurement_data(self, matrix_Z):
+        """
+        Set measurement data for update
         
+        Args:
+            matrix_Z: measurement vector
+        """
+        self.matrix_Z_ = matrix_Z.copy()
+    
+    def _initialize_matrices(self):
+        """
+        Initialize Kalman Filter matrices
+        """
         # Calculate look ahead distance
         look_ahead_dist = self.speed_ * self.look_forward_time_
         dx = look_ahead_dist
@@ -105,7 +118,7 @@ class EstimateLaneParam:
         diag_Q = np.array([0.001, 0.001, 0.001, 0.001])
         np.fill_diagonal(self.matrix_Q_, diag_Q)
         
-        # Measurement noise covariance matrix R
+        # Measurement noise covariance matrix R； 固定测量噪声；
         self.matrix_R_ = np.zeros((4, 4))
         diag_R = np.array([0.1, 0.1, 0.1, 0.1])
         np.fill_diagonal(self.matrix_R_, diag_R)
@@ -113,17 +126,119 @@ class EstimateLaneParam:
         # Control vector U
         self.matrix_U_ = np.array([[self.w_]])
         
-        # Create and run Kalman Filter
-        kalman = KalmanFilter(
+        # Create Kalman Filter instance
+        self.kalman_ = KalmanFilter(
             matrix_A, matrix_B, matrix_H, 
             self.matrix_P_, self.matrix_Q_, self.matrix_R_,
             self.matrix_X_, self.matrix_U_
         )
+    
+    def predict(self, matrix_P, matrix_X):
+        """
+        Perform prediction step only
         
-        # Predict and update
-        kalman.predict()
-        kalman.update(self.matrix_Z_)
+        Args:
+            matrix_P: error covariance matrix (input/output)
+            matrix_X: state vector (input/output)
+        """
+        # Set current state
+        self.set_state_data(matrix_X, matrix_P)
+        
+        # Initialize matrices if needed
+        if self.kalman_ is None:
+            self._initialize_matrices()
+        else:
+            # Update Kalman Filter with current state
+            self.kalman_.x_ = self.matrix_X_.copy()
+            self.kalman_.P_ = self.matrix_P_.copy()
+        
+        # Perform prediction
+        self.kalman_.predict()
         
         # Update output parameters
-        matrix_X[:] = kalman.x_[:4]
-        matrix_P[:] = kalman.P_[:] 
+        matrix_X[:] = self.kalman_.x_[:4]
+        matrix_P[:] = self.kalman_.P_[:]
+
+    def update(self, matrix_P, matrix_X, matrix_Z):
+        """
+        Perform update step only
+        """
+        self.set_measurement_data(matrix_Z)
+        self.set_state_data(matrix_X, matrix_P)
+        # Update Kalman Filter with current state
+        self.kalman_.x_ = self.matrix_X_.copy()
+        self.kalman_.P_ = self.matrix_P_.copy()        
+        self.kalman_.update(self.matrix_Z_)
+        # Update output parameters
+        matrix_X[:] = self.kalman_.x_[:4]
+        matrix_P[:] = self.kalman_.P_[:]
+    
+    def predict_and_update(self, matrix_P, matrix_X, matrix_Z):
+        """
+        Perform both prediction and update steps in sequence
+        
+        Args:
+            matrix_P: error covariance matrix (input/output)
+            matrix_X: state vector (input/output)
+            matrix_Z: measurement vector
+        """
+        # First predict
+        self.predict(matrix_P, matrix_X)
+        
+        # Then update with measurement
+        self.set_measurement_data(matrix_Z)
+        
+        # Set current state (after prediction)
+        self.set_state_data(matrix_X, matrix_P)
+        
+        # Update Kalman Filter with current state
+        self.kalman_.x_ = self.matrix_X_.copy()
+        self.kalman_.P_ = self.matrix_P_.copy()
+        
+        # Perform update
+        self.kalman_.update(self.matrix_Z_)
+        
+        # Update output parameters
+        matrix_X[:] = self.kalman_.x_[:4]
+        matrix_P[:] = self.kalman_.P_[:]
+    
+    def predict_only(self, matrix_P, matrix_X):
+        """
+        Legacy method for backward compatibility
+        Perform prediction step only
+        """
+        self.predict(matrix_P, matrix_X)
+    
+    # Legacy methods for backward compatibility
+    def set_data(self, matrix_X, speed, look_forward_time, w, matrix_Z=None):
+        """
+        Legacy method for backward compatibility
+        Set all data at once
+        
+        Args:
+            matrix_X: state vector
+            speed: vehicle speed
+            look_forward_time: look forward time
+            w: angular velocity
+            matrix_Z: measurement vector (optional)
+        """
+        self.set_motion_data(speed, look_forward_time, w)
+        # For legacy compatibility, we don't set P here as it's passed to estimate_lane_line_param
+        self.matrix_X_ = matrix_X.copy()
+        if matrix_Z is not None:
+            self.set_measurement_data(matrix_Z)
+    
+    def estimate_lane_line_param(self, matrix_P, matrix_X, measurement_available=True):
+        """
+        Legacy method for backward compatibility
+        Estimate lane line parameters using Kalman Filter
+        
+        Args:
+            matrix_P: error covariance matrix (input/output)
+            matrix_X: state vector (input/output)
+            measurement_available: whether measurement is available for update step
+        """
+        if measurement_available and self.matrix_Z_ is not None:
+            self.predict_and_update(matrix_P, matrix_X, self.matrix_Z_)
+        else:
+            self.predict(matrix_P, matrix_X) 

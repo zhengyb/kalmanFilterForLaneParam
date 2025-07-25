@@ -9,6 +9,8 @@ python_src/
 ├── kalman_filter.py      # Kalman Filter implementation
 ├── estimate_lane_param.py # Lane parameter estimation
 ├── main.py              # Main program
+├── example_usage.py     # Example demonstrating missing measurement handling
+├── example_separated_steps.py # Example demonstrating separated predict/update steps
 ├── requirements.txt     # Python dependencies
 └── README.md           # This file
 ```
@@ -27,12 +29,91 @@ Run the main program:
 python main.py
 ```
 
+Run the example with missing measurements:
+```bash
+python example_usage.py
+```
+
+Run the example with separated predict/update steps:
+```bash
+python example_separated_steps.py
+```
+
 ## Features
 
 - **Kalman Filter**: Standard Kalman Filter implementation for state estimation
 - **Lane Parameter Estimation**: Estimates lane line parameters (c0, c1, c2, c3) using polynomial model
 - **Noise Handling**: Processes both measurement and process noise
 - **Real-time Updates**: Supports continuous parameter updates based on new measurements
+- **Missing Measurement Handling**: Supports prediction-only mode when measurements are unavailable
+- **Separated Predict/Update Steps**: Independent control over prediction and update operations
+
+## Enhanced Functionality
+
+### Separated Predict and Update Steps
+
+The implementation now provides complete separation of prediction and update steps for maximum flexibility:
+
+#### Core Methods:
+
+1. **`set_motion_data(speed, look_forward_time, w)`**: Set motion parameters (only need to call once if parameters don't change)
+2. **`predict(matrix_P, matrix_X)`**: Perform prediction step only (when measurement is missing)
+3. **`predict_and_update(matrix_P, matrix_X, matrix_Z)`**: Perform both prediction and update steps in sequence (when measurement is available)
+
+#### Usage Examples:
+
+```python
+# Initialize estimator
+estimator = EstimateLaneParam()
+
+# Set motion data (only once)
+estimator.set_motion_data(speed=20.0, look_forward_time=0.5, w=0.1)
+
+# Case 1: Prediction only (when measurement is missing)
+estimator.predict(matrix_P, matrix_X)
+
+# Case 2: Predict and update in sequence (when measurement is available)
+estimator.predict_and_update(matrix_P, matrix_X, measurement)
+```
+
+#### Real-world Scenarios:
+
+1. **Measurement Missing**: Use `predict()` to advance the state based on motion model
+2. **Measurement Available**: Use `predict_and_update()` to incorporate new measurements
+
+### Handling Missing Measurements
+
+The implementation supports scenarios where measurements may be missing or unavailable:
+
+1. **Prediction-Only Mode**: When no measurement is available, the system can perform prediction step only
+2. **Flexible Update Control**: The `estimate_lane_line_param` method accepts a `measurement_available` parameter
+3. **Separate Prediction Method**: `predict_only()` method for cases where only prediction is needed
+
+#### Usage Examples:
+
+```python
+# Case 1: Full estimation with measurement
+estimator.set_data(matrix_X, speed, look_forward_time, w, matrix_Z)
+estimator.estimate_lane_line_param(matrix_P, matrix_X, measurement_available=True)
+
+# Case 2: Prediction only (no measurement)
+estimator.set_data(matrix_X, speed, look_forward_time, w, matrix_Z=None)
+estimator.predict_only(matrix_P, matrix_X)
+
+# Case 3: Explicit control
+estimator.estimate_lane_line_param(matrix_P, matrix_X, measurement_available=False)  # predict only
+estimator.estimate_lane_line_param(matrix_P, matrix_X, measurement_available=True)   # predict + update
+```
+
+### Backward Compatibility
+
+Legacy methods are still supported for backward compatibility:
+
+- `set_data()`: Set all data at once
+- `estimate_lane_line_param()`: Combined prediction and update
+- `predict_only()`: Prediction only
+
+This enhancement makes the system more robust for real-world applications where sensor data may be intermittent or unreliable.
 
 ## Algorithm Overview
 
