@@ -33,3 +33,4 @@
 
 python_src/.venv/
 python_src/__pycache__/
+kalman_filter/build/
